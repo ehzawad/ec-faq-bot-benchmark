@@ -50,7 +50,15 @@ The reranker has three safety layers:
 2. **Confidence gate**: SLM must report confidence ≥ 0.60
 3. **Candidate score gate**: picked candidate's E5 score must be ≥ 0.80
 
-Three possible outcomes: **Override** (SLM pick replaces E5), **Fallback** (SLM picked but failed a gate), **Abstain** (SLM refused to judge).
+Three possible outcomes:
+
+| Metric | What it means | When it happens |
+| --- | --- | --- |
+| **Override Rate** | Fraction of queries where the SLM's pick **replaced** the original E5 answer. | SLM picked a candidate **AND** its self-reported confidence ≥ 0.60 **AND** the candidate's E5 retrieval score ≥ 0.80. All three conditions must pass. |
+| **Abstain Rate** | Fraction of queries where the SLM **refused to judge** — returned `"abstain": true`, empty JSON `{}`, or the request failed/timed out. | System falls back to the original E5 answer unchanged. This is a model-level limitation (e.g. qwen3:1.7b returns empty JSON ~45% of the time because it can't process the prompt). |
+| **Fallback Rate** | Fraction of queries where the SLM **picked a candidate but failed a gate** — either confidence was too low or candidate score was too low. Implicit: `1 - Override Rate - Abstain Rate`. | System discards the SLM's pick and keeps the original E5 answer. Example: tigerllm-1b always picks Candidate 1 but reports confidence=0.0 (copies the placeholder from the prompt schema), so it has 0% override and 100% fallback. |
+
+In all non-override cases (fallback or abstain), the final answer is the **original E5 retrieval result** — the SLM never makes things worse, it either improves or is ignored.
 
 See [`architecture/slm_reranker_design.md`](architecture/slm_reranker_design.md) for the decision flow diagram, prompt template, and model behavior comparison.
 
