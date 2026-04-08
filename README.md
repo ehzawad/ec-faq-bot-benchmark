@@ -45,10 +45,14 @@ See [`architecture/pipeline_architecture.md`](architecture/pipeline_architecture
 
 ### SLM Reranker
 
-The reranker has three safety layers:
-1. **Ambiguity gate**: only fires when top-1 and top-2 FAISS scores are within 0.03
-2. **Confidence gate**: SLM must report confidence ≥ 0.60
-3. **Candidate score gate**: picked candidate's E5 score must be ≥ 0.80
+**What is a judge?** The SLM (Small Language Model) acts as a **judge** — it does not generate answers. It receives the user's Bengali question and 3 candidate answers retrieved by FAISS, reads them, and picks the best one. It outputs structured JSON: `{"best_index": 1, "confidence": 0.95, "abstain": false}`. The judge never writes its own response — the final answer always comes from the pre-existing FAQ dataset. The SLM only decides *which* pre-existing answer to show.
+
+**What is a gate?** A gate is a **threshold check** that must pass before the system acts on the SLM's decision. Gates are safety mechanisms — they prevent the SLM from overriding a correct E5 answer with a bad pick. If any gate fails, the system silently ignores the SLM's pick and keeps the original E5 answer. The user never knows the SLM was consulted.
+
+The reranker has three gates:
+1. **Ambiguity gate** (pre-SLM): only invokes the SLM when top-1 and top-2 FAISS scores are within 0.03. If the retrieval result is clear (large score gap), the SLM is never called — no latency added.
+2. **Confidence gate** (post-SLM): the SLM must self-report confidence ≥ 0.60 in its JSON output. If it says confidence=0.0 (like tigerllm always does), the pick is discarded.
+3. **Candidate score gate** (post-SLM): the picked candidate's original E5 retrieval score must be ≥ 0.80. Prevents the SLM from selecting a low-quality candidate that FAISS ranked poorly.
 
 Three possible outcomes:
 
